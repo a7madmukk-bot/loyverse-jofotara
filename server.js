@@ -1,25 +1,30 @@
 const express = require('express');
 const { MongoClient } = require('mongodb');
 const app = express();
-
 app.use(express.json());
 
-// الاتصال بقاعدة البيانات باستخدام الرابط الذي وضعناه في Render
 const client = new MongoClient(process.env.MONGODB_URI);
+let db;
 
-async function startConnection() {
-    try {
-        await client.connect();
-        console.log("✅ تم الاتصال بـ MongoDB بنجاح!");
-    } catch (err) {
-        console.error("❌ خطأ في الاتصال:", err.message);
-    }
+// الاتصال بالخزانة أولاً
+async function init() {
+    await client.connect();
+    db = client.db("Clutch-Jofotara-DB");
+    console.log("✅ تم الاتصال بقاعدة البيانات بنجاح!");
 }
-startConnection();
+init();
 
-app.post('/webhook', (req, res) => {
-    console.log("استلمنا فاتورة جديدة...");
+app.post('/webhook', async (req, res) => {
+    const merchantId = req.body.merchant_id;
+    // الموظف يبحث في الخزانة
+    const store = await db.collection('stores').findOne({ merchant_id: merchantId });
+    
+    if (store) {
+        console.log(`✅ الموظف يقول: الفاتورة تخص المتجر: ${store.store_name} وهو فعال (active)!`);
+    } else {
+        console.log(`❌ الموظف يقول: لم أجد أي سجل لهذا المتجر: ${merchantId}`);
+    }
     res.status(200).send('OK');
 });
 
-app.listen(3000, () => console.log('السيرفر يعمل...'));
+app.listen(3000);
