@@ -17,9 +17,8 @@ app.post('/webhook', (req, res) => {
     // الرد على لويفيرس لتأكيد الاستلام
     res.status(200).send('Receipt received');
 });
-
-// تشغيل النظام على المنفذ 3000
-const PORT = 3000;
-app.listen(PORT, () => {
-    console.log(`🚀 النظام يعمل ويستمع على المنفذ ${PORT}`);
-});
+javascript
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => {
+        console.log('السيرفر يعمل');
+    });
