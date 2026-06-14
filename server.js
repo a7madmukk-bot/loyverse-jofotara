@@ -1,40 +1,44 @@
 const express = require('express');
-const axios = require('axios'); // هذه المكتبة المسؤولة عن الإرسال
+const axios = require('axios');
 const app = express();
 
 app.use(express.json());
 
-// الرابط التجريبي الذي سنرسل له البيانات لنختبر (استبدله لاحقاً برابط جو فوترة)
-const JO_FOTARA_URL = 'https://webhook.site/YOUR_UNIQUE_URL'; 
+// الرابط الأساسي للتأكد أن السيرفر مستيقظ
+app.get('/', (req, res) => {
+    res.send('السيرفر يعمل بنجاح ومستعد لاستقبال الفواتير...');
+});
 
-app.post('/webhook', async (req, res) => {
-    console.log("=== 🧾 استلام فاتورة من لويفيرس ===");
-    const receipt = req.body.receipts ? req.body.receipts[0] : null;
+app.post('/webhook', (req, res) => {
+    console.log("=== 🧾 استلام بيانات جديدة من لويفيرس ===");
 
-    if (receipt) {
-        console.log(`📌 جاري تجهيز الفاتورة رقم: ${receipt.receipt_number}`);
+    try {
+        const data = req.body;
 
-        // تجهيز بيانات الفاتورة بالشكل الذي تحتاجه الضريبة
-        const invoiceData = {
-            invoiceNumber: receipt.receipt_number,
-            totalAmount: receipt.total_money,
-            taxAmount: receipt.total_tax,
-            timestamp: receipt.created_at
-        };
-
-        // محاولة إرسال البيانات
-        try {
-            console.log("🚀 جاري إرسال البيانات إلى نظام الفوترة...");
-            // هنا سنرسل البيانات فعلياً
-            // await axios.post(JO_FOTARA_URL, invoiceData); 
-            console.log("✅ تم إرسال البيانات بنجاح (تجريبي):", invoiceData);
-        } catch (error) {
-            console.log("❌ فشل الإرسال:", error.message);
+        // التحقق من وجود بيانات فاتورة
+        if (data.receipts && data.receipts.length > 0) {
+            const receipt = data.receipts[0];
+            
+            console.log(`📌 رقم الفاتورة: ${receipt.receipt_number}`);
+            console.log(`💰 الإجمالي: ${receipt.total_money}`);
+            console.log(`⚖️ الضريبة: ${receipt.total_tax}`);
+            console.log(`🆔 رمز المتجر (Merchant ID): ${data.merchant_id}`);
+            console.log("⏳ جاري التجهيز للإرسال إلى نظام الفوترة...");
+            
+            // هنا سنضع لاحقاً كود الإرسال إلى جو فوترة باستخدام axios
+            
+        } else {
+            console.log("تم استلام حدث، ولكن ليس فاتورة مبيعات.");
         }
+    } catch (error) {
+        console.log("خطأ في معالجة البيانات:", error.message);
     }
-    
+
+    console.log("=======================================");
     res.status(200).send('OK');
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`السيرفر يعمل...`));
+app.listen(PORT, () => {
+    console.log(`السيرفر يعمل على المنفذ ${PORT}`);
+});
