@@ -8,15 +8,12 @@ app.use(express.json());
 // =========================================================================
 // 1. إعدادات قاعدة البيانات (الخزانة)
 // =========================================================================
-
-// ضع رابط قاعدة بيانات MongoDB الخاص بك بين علامتي التنصيص هنا
 const mongoURI = "mongodb+srv://admin_ahmad:Mukran12@cluster0.n1tq5.mongodb.net/clutch_db?retryWrites=true&w=majority&appName=Cluster0";
 
 mongoose.connect(mongoURI)
     .then(() => console.log('✅ تم الاتصال بقاعدة البيانات MongoDB بنجاح'))
     .catch(err => console.error('❌ خطأ في الاتصال بقاعدة البيانات:', err));
 
-// تعريف شكل بيانات العميل في الخزانة
 const storeSchema = new mongoose.Schema({
     merchant_id: String,
     status: String,
@@ -30,12 +27,42 @@ const Store = mongoose.model('Store', storeSchema);
 // 2. دوال نظام "جو فوترة" (المترجم والمُرسل)
 // =========================================================================
 
-// أ. المترجم: يحول بيانات الفاتورة إلى صيغة XML معتمدة ثم يشفرها
+// أ. المترجم الحقيقي: يحول بيانات لويفيرس الفعلية إلى صيغة XML معتمدة
 function generateJoFotaraXML(receiptData) {
-    // قالب UBL 2.1 مبسط
+    // 1. استخراج الإجماليات الأساسية
+    const invoiceNumber = receiptData.receipt_number || "INV-0000";
+    const totalAmount = receiptData.total_money || 0;
+    const totalTax = receiptData.total_tax || 0;
+    const amountBeforeTax = totalAmount - totalTax;
+
+    // 2. حلقة التكرار: بناء أسطر المنتجات برمجياً
+    let invoiceLinesXML = '';
+    
+    if (receiptData.line_items && receiptData.line_items.length > 0) {
+        receiptData.line_items.forEach((item, index) => {
+            const qty = item.quantity || 1;
+            const price = item.price || 0;
+            const itemTotal = qty * price;
+
+            invoiceLinesXML += `
+    <cac:InvoiceLine>
+        <cbc:ID>${index + 1}</cbc:ID>
+        <cbc:InvoicedQuantity unitCode="PCE">${qty}</cbc:InvoicedQuantity>
+        <cbc:LineExtensionAmount currencyID="JOD">${itemTotal}</cbc:LineExtensionAmount>
+        <cac:Item>
+            <cbc:Name>${item.item_name || 'منتج عام'}</cbc:Name>
+        </cac:Item>
+        <cac:Price>
+            <cbc:PriceAmount currencyID="JOD">${price}</cbc:PriceAmount>
+        </cac:Price>
+    </cac:InvoiceLine>`;
+        });
+    }
+
+    // 3. دمج الإجماليات مع أسطر المنتجات في قالب الضريبة الرسمي
     const xmlTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 <Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
-    <cbc:ID>${receiptData.receipt_number || 'INV-001'}</cbc:ID>
+    <cbc:ID>${invoiceNumber}</cbc:ID>
     <cbc:IssueDate>2026-06-15</cbc:IssueDate>
     <cbc:InvoiceTypeCode name="011">388</cbc:InvoiceTypeCode>
     <cbc:DocumentCurrencyCode>JOD</cbc:DocumentCurrencyCode>
@@ -47,14 +74,15 @@ function generateJoFotaraXML(receiptData) {
         </cac:Party>
     </cac:AccountingSupplierParty>
     <cac:LegalMonetaryTotal>
-        <cbc:TaxExclusiveAmount currencyID="JOD">${receiptData.total_money || '0.00'}</cbc:TaxExclusiveAmount>
-        <cbc:PayableAmount currencyID="JOD">${receiptData.total_money || '0.00'}</cbc:PayableAmount>
+        <cbc:TaxExclusiveAmount currencyID="JOD">${amountBeforeTax}</cbc:TaxExclusiveAmount>
+        <cbc:TaxInclusiveAmount currencyID="JOD">${totalAmount}</cbc:TaxInclusiveAmount>
+        <cbc:PayableAmount currencyID="JOD">${totalAmount}</cbc:PayableAmount>
     </cac:LegalMonetaryTotal>
+    ${invoiceLinesXML}
 </Invoice>`;
 
     // التشفير إلى Base64
-    const base64XML = Buffer.from(xmlTemplate).toString('base64');
-    return base64XML;
+    return Buffer.from(xmlTemplate).toString('base64');
 }
 
 // ب. المُرسل: يطرق باب الضريبة ويرسل الفاتورة المشفرة
@@ -80,7 +108,7 @@ async function sendToJoFotara(clientId, secretKey, encryptedXML) {
         return response.data; 
 
     } catch (error) {
-        console.log("❌ تم رفض الطلب من قِبل الضريبة (وهذا طبيعي الآن لأننا نستخدم مفاتيح وهمية):");
+        console.log("❌ تم رفض الطلب من قِبل الضريبة (مفاتيح وهمية):");
         if (error.response) {
             console.log("السبب:", error.response.data);
         } else {
@@ -104,22 +132,22 @@ app.post('/webhook', async (req, res) => {
         const merchantId = receiptData.merchant_id;
 
         console.log(`\n--- فاتورة جديدة قادمة! ---`);
+        console.log("تفاصيل الفاتورة من لويفيرس:", JSON.stringify(receiptData, null, 2));
         
         // البحث عن التاجر في قاعدة البيانات
         const store = await Store.findOne({ merchant_id: merchantId });
 
         if (!store) {
-            console.log(`❌ الموظف يقول: لم أجد أي سجل لهذا المتجر (${merchantId}) في الخزانة. سيتم تجاهل الفاتورة.`);
+            console.log(`❌ لم أجد أي سجل لهذا المتجر (${merchantId}) في الخزانة.`);
             return;
         }
 
-        // إذا كان التاجر موجوداً، نفحص حالته
         if (store.status === "active") {
             console.log(`✅ الفاتورة تخص المتجر: ${store.store_name} وهو فعال.`);
             
-            // 1. تمرير الفاتورة للمترجم لتشفيرها
+            // 1. تمرير الفاتورة للمترجم الذكي لتفكيكها وتشفيرها
             const encryptedInvoice = generateJoFotaraXML(receiptData);
-            console.log("تمت ترجمة وتشفير الفاتورة بنجاح.");
+            console.log("تمت ترجمة وتشفير منتجات الفاتورة بنجاح.");
             
             // 2. إرسالها إلى الضريبة بمفاتيح تجريبية لاختبار الاتصال
             const dummyClientId = "test-client-id-12345";
@@ -128,7 +156,7 @@ app.post('/webhook', async (req, res) => {
             await sendToJoFotara(dummyClientId, dummySecret, encryptedInvoice);
             
         } else {
-            console.log(`⚠️ المتجر: ${store.store_name} موجود لكن اشتراكه غير فعال (inactive). لن يتم إرسال الفاتورة.`);
+            console.log(`⚠️ المتجر: ${store.store_name} اشتراكه غير فعال (inactive). لن يتم الإرسال.`);
         }
 
     } catch (error) {
