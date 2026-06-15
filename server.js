@@ -26,6 +26,17 @@ app.post('/webhook', async (req, res) => {
     }
     res.status(200).send('OK');
 });const axios = require('axios');
+// ====== كود اختبار الاتصال بنظام الضريبة (للتجربة فقط) ======
+const dummyClientId = "test-client-id-12345";
+const dummySecret = "test-secret-key-67890";
+// هذه كلمة "فاتورة تجريبية" مشفرة بنظام Base64 كما تطلب الضريبة
+const dummyXMLBase64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPEludm9pY2U+VGVzdDwvSW52b2ljZT4="; 
+
+// نجعل السيرفر ينتظر 3 ثواني بعد تشغيله ثم يطرق باب الضريبة
+setTimeout(() => {
+    console.log("==> جاري تنفيذ اختبار النبض مع خوادم جو فوترة...");
+    sendToJoFotara(dummyClientId, dummySecret, dummyXMLBase64);
+}, 3000);
 
 // دالة لإرسال الفاتورة إلى جو فوترة
 async function sendToJoFotara(clientId, secretKey, encryptedXML) {
