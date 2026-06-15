@@ -10,7 +10,7 @@ app.use(express.json());
 // =========================================================================
 
 // ضع رابط قاعدة بيانات MongoDB الخاص بك بين علامتي التنصيص هنا
-const mongoURI = "mongodb+srv://admin_ahmad:Mukran12@cluster0.ea7snh4.mongodb.net/?appName=Cluster0";
+const mongoURI = "mongodb+srv://admin_ahmad:Mukran12@cluster0.n1tq5.mongodb.net/clutch_db?retryWrites=true&w=majority&appName=Cluster0";
 
 mongoose.connect(mongoURI)
     .then(() => console.log('✅ تم الاتصال بقاعدة البيانات MongoDB بنجاح'))
